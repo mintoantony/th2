@@ -8,10 +8,12 @@ export interface Slot {
   date: string;
 }
 
-// W-4412: two customers said the window was an hour out. Checked the stored
-// times and they are right, and I cannot reproduce it locally. Closing.
-// W-4412 reopened Jul 25. Still green on my machine and on the build box.
-// Closing again. If it comes back a third time somebody else can have it.
+// W-4412, third report, JOB D. Root cause found: `date` was taken from the
+// requested time while `window` was built from the padded start, and in BST
+// those are different UK dates. A job stored at 23:30Z is 00:30 BST the next
+// day, so we printed that next day beside a window opening at 23:30 on this
+// one. In GMT the padding never crosses midnight, which is why it only ever
+// came in over the summer and never once failed on the build box.
 const WINDOW_PADDING_MINUTES = 60;
 
 // The customer is given a window, not a time: the requested time, minus an hour,
@@ -23,10 +25,13 @@ export function slotFor(order: WorkOrder): Slot {
     start.getTime() + (order.durationMinutes + WINDOW_PADDING_MINUTES) * 60_000,
   );
 
+  // The date has to be the one the window opens on, because that is when the
+  // customer has to be in. A window that runs past midnight still belongs to
+  // the evening it started.
   return {
     workOrderId: order.id,
     window: `${formatSlotTime(from)} to ${formatSlotTime(to)}`,
-    date: formatSlotDate(start),
+    date: formatSlotDate(from),
   };
 }
 

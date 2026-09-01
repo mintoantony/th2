@@ -13,3 +13,27 @@ in the winter, and it has never once failed on the build box.
 
 Everything the customer sees is UK local. Everything we store is UTC. Somewhere
 those two are being treated as the same thing.
+
+---
+
+## Fixed, 1 Sep. Same root cause as W-4412.
+
+`slotFor()` took `date` from the requested time but built `window` from the
+padded start, an hour earlier. Those are the same UK date for most of the year.
+They are not when the padding crosses midnight.
+
+W-5006 is stored 2026-09-02T23:30Z. In BST that is 00:30 on the 3rd, so `date`
+printed 2026-09-03, while the window opened at 23:30 on the 2nd. Trelawney were
+told the 3rd for an appointment they had to be in for on the 2nd.
+
+In GMT, 23:30 minus an hour is 22:30 the same day and nothing crosses midnight,
+which is why it only ever came in over the summer. It never failed on the build
+box because every date test used midday, and midday does not straddle anything.
+
+The date is now taken from the start of the window, which is when the customer
+has to be in. A window running past midnight belongs to the evening it started.
+
+The existing test asserted the wrong date. It was written from the output rather
+than from the confirmation the customer receives, which is how this stayed green
+through two closures. Corrected, and the suite now passes under UTC,
+Europe/London, America/New_York and Australia/Sydney.

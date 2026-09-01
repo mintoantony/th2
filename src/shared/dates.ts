@@ -56,6 +56,9 @@ export function formatSlotDate(d: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+// A day means the day the customer is living in, so this compares UK dates and
+// not UTC ones. Between 23:00 and midnight UTC in summer the two disagree, and
+// dispatch was letting a second van through on exactly those.
 export function sameDay(a: Date, b: Date): boolean {
-  return toDateKey(a) === toDateKey(b);
+  return formatSlotDate(a) === formatSlotDate(b);
 }
