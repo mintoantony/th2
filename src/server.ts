@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
-import { customers, invoices, workOrders } from './db.ts';
-import { totalFor, outstandingFor } from './invoices/calc.ts';
+import { customers, invoices, payments, workOrders } from './db.ts';
+import { totalFor, outstandingFor, balanceFor, isPaid, paidFor } from './invoices/calc.ts';
 import { statementFor, ALL_TIME, type StatementPeriod } from './invoices/statement.ts';
 import { dispatch } from './scheduling/dispatch.ts';
 import { slotsFor } from './scheduling/slots.ts';
@@ -48,6 +48,7 @@ export const server = createServer((req, res) => {
         'GET /customers/:id/invoices',
         'GET /customers/:id/statement',
         'GET /invoices/:id',
+        'GET /payments',
         'GET /work-orders',
         'GET /dispatch',
         'GET /slots',
@@ -64,12 +65,24 @@ export const server = createServer((req, res) => {
     if (!customer) return json(res, 404, { error: 'no such customer' });
     return json(res, 200, {
       ...customer,
-      outstanding: format(outstandingFor(customer.id, invoices)),
+      outstanding: format(outstandingFor(customer.id, invoices, payments)),
     });
   }
 
   if (parts[0] === 'customers' && parts.length === 3 && parts[2] === 'invoices') {
-    return json(res, 200, invoices.filter((i) => i.customerId === parts[1]));
+    return json(
+      res,
+      200,
+      invoices
+        .filter((i) => i.customerId === parts[1])
+        // `paid` used to be a column on the invoice. It is derived now, so the
+        // front end already reading it does not have to change.
+        .map((invoice) => ({
+          ...invoice,
+          paid: isPaid(invoice, payments),
+          balance: balanceFor(invoice, payments),
+        })),
+    );
   }
 
   if (parts[0] === 'customers' && parts.length === 3 && parts[2] === 'statement') {
@@ -81,14 +94,27 @@ export const server = createServer((req, res) => {
     if (!customer) return json(res, 404, { error: 'no such customer' });
     const period = readPeriod(url);
     if ('error' in period) return json(res, 400, period);
-    return json(res, 200, statementFor(customer, invoices, period));
+    return json(res, 200, statementFor(customer, invoices, payments, period));
   }
 
   if (parts[0] === 'invoices' && parts.length === 2) {
     const invoice = invoices.find((i) => i.id === parts[1]);
     if (!invoice) return json(res, 404, { error: 'no such invoice' });
     const totals = totalFor(invoice);
-    return json(res, 200, { ...invoice, ...totals, display: format(totals.total) });
+    const settled = paidFor(invoice.id, payments);
+    return json(res, 200, {
+      ...invoice,
+      ...totals,
+      paid: isPaid(invoice, payments),
+      settled,
+      balance: totals.total - settled,
+      payments: payments.filter((payment) => payment.invoiceId === invoice.id),
+      display: format(totals.total),
+    });
+  }
+
+  if (parts[0] === 'payments') {
+    return json(res, 200, payments);
   }
 
   if (parts[0] === 'work-orders') {
