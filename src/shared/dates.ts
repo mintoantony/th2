@@ -23,26 +23,6 @@ const UK_DATE_FORMAT = new Intl.DateTimeFormat('en-GB', {
   day: '2-digit',
 });
 
-export function toDateKey(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
-
-export function isWorkingDay(d: Date): boolean {
-  const day = d.getDay();
-  if (day === 0 || day === 6) return false;
-  return !BANK_HOLIDAYS_2026.includes(toDateKey(d));
-}
-
-export function addWorkingDays(from: Date, n: number): Date {
-  const d = new Date(from.getTime());
-  let left = n;
-  while (left > 0) {
-    d.setDate(d.getDate() + 1);
-    if (isWorkingDay(d)) left--;
-  }
-  return d;
-}
-
 // What the customer is told their appointment time is.
 export function formatSlotTime(d: Date): string {
   return UK_TIME_FORMAT.format(d);
@@ -56,6 +36,49 @@ export function formatSlotDate(d: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+// The UTC date. Still useful for keying stored data, but it is NOT the day the
+// customer is in: after 23:00 in summer the two have already diverged.
+export function toDateKey(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+// Day of week for a UK calendar day, worked out from the date itself rather than
+// from a Date object, so the answer cannot depend on where the server runs.
+function dayOfWeek(ukDate: string): number {
+  const [year, month, day] = ukDate.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+}
+
+// Working days are UK days. This used to read the weekend off the server clock
+// with getDay() and then look the bank holiday up under a UTC key, so a job at
+// 23:30 in summer was tested against one day for the weekend and another for the
+// holiday. It called the August bank holiday a working day in London, called an
+// ordinary Tuesday a holiday everywhere, and gave different answers on a UTC box
+// than on a UK one. Both halves now ask the same question of the same UK date.
+export function isWorkingDay(d: Date): boolean {
+  const ukDate = formatSlotDate(d);
+  const day = dayOfWeek(ukDate);
+  if (day === 0 || day === 6) return false;
+  return !BANK_HOLIDAYS_2026.includes(ukDate);
+}
+
+// Steps whole UK calendar days, anchored at midday UTC so that adding a day can
+// never land on a clock change and lose or repeat one. Returns midday UTC on the
+// resulting UK day rather than preserving the time of day it was handed.
+export function addWorkingDays(from: Date, n: number): Date {
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  let cursor = Date.parse(`${formatSlotDate(from)}T12:00:00Z`);
+  let left = n;
+  while (left > 0) {
+    cursor += DAY_MS;
+    if (isWorkingDay(new Date(cursor))) left--;
+  }
+  return new Date(cursor);
+}
+
+// A day means the day the customer is living in, so this compares UK dates and
+// not UTC ones. Between 23:00 and midnight UTC in summer the two disagree, and
+// dispatch was letting a second van through on exactly those.
 export function sameDay(a: Date, b: Date): boolean {
-  return toDateKey(a) === toDateKey(b);
+  return formatSlotDate(a) === formatSlotDate(b);
 }
