@@ -1,11 +1,14 @@
-import type { Customer, Invoice } from '../db.ts';
+import type { Customer, Invoice, Payment } from '../db.ts';
 import { format, sum, type Pence } from '../shared/money.ts';
-import { totalFor } from './calc.ts';
+import { balanceFor, isPaid, totalFor } from './calc.ts';
 
 export interface StatementInvoice {
   id: string;
   issued: string;
+  // Both are as at the end of the period, not as at today. Re-running last
+  // quarter's statement has to show last quarter's position.
   paid: boolean;
+  balance: Pence;
   net: Pence;
   vat: Pence;
   total: Pence;
@@ -40,45 +43,53 @@ export interface CustomerStatement {
 
 export const ALL_TIME: StatementPeriod = { from: null, to: null };
 
-// `issued` is a plain YYYY-MM-DD string and these comparisons are string
-// comparisons on purpose. Parsing them into Dates would drag the UTC and UK
-// local problem into billing, and an issue date has no time of day to get wrong.
-function issuedWithin(issued: string, period: StatementPeriod): boolean {
-  if (period.from !== null && issued < period.from) return false;
-  if (period.to !== null && issued > period.to) return false;
+// Issue dates and payment dates are both plain YYYY-MM-DD strings, and these are
+// string comparisons on purpose. Parsing them into Dates would drag the UTC and
+// UK local problem into billing, and neither has a time of day to get wrong.
+function withinPeriod(date: string, period: StatementPeriod): boolean {
+  if (period.from !== null && date < period.from) return false;
+  if (period.to !== null && date > period.to) return false;
   return true;
 }
 
 export function statementFor(
   customer: Customer,
   allInvoices: Invoice[],
+  allPayments: Payment[],
   period: StatementPeriod = ALL_TIME,
 ): CustomerStatement {
   const theirs = allInvoices.filter((invoice) => invoice.customerId === customer.id);
+  const theirIds = new Set(theirs.map((invoice) => invoice.id));
+  const theirPayments = allPayments.filter((payment) => theirIds.has(payment.invoiceId));
 
-  // What they still owed when the period opened. With no `from` there is no
-  // earlier history to bring forward.
+  // What was owed when the period opened: everything billed before it, less
+  // everything received before it. Both halves are date bounded, which is what
+  // makes a historic statement come out the same today as it did at the time.
+  // The old version asked which invoices are unpaid *now*, so an invoice settled
+  // after the period had already closed silently vanished from this figure.
   const broughtForward = period.from === null
     ? 0
-    : sum(
-      theirs
-        .filter((invoice) => invoice.issued < period.from! && !invoice.paid)
-        .map((invoice) => totalFor(invoice).total),
-    );
+    : sum(theirs.filter((invoice) => invoice.issued < period.from!).map((invoice) => totalFor(invoice).total))
+      - sum(theirPayments.filter((payment) => payment.received < period.from!).map((payment) => payment.amountPence));
 
   const statementInvoices = theirs
-    .filter((invoice) => issuedWithin(invoice.issued, period))
+    .filter((invoice) => withinPeriod(invoice.issued, period))
     .sort((a, b) => a.issued.localeCompare(b.issued) || a.id.localeCompare(b.id))
     .map((invoice) => ({
       id: invoice.id,
       issued: invoice.issued,
-      paid: invoice.paid,
+      paid: isPaid(invoice, theirPayments, period.to),
+      balance: balanceFor(invoice, theirPayments, period.to),
       ...totalFor(invoice),
     }));
 
   const invoiced = sum(statementInvoices.map((invoice) => invoice.total));
+  // Money received during the period, whichever invoice it was against. A
+  // payment settling an older invoice still belongs on this statement.
   const paid = sum(
-    statementInvoices.filter((invoice) => invoice.paid).map((invoice) => invoice.total),
+    theirPayments
+      .filter((payment) => withinPeriod(payment.received, period))
+      .map((payment) => payment.amountPence),
   );
   const outstanding = broughtForward + invoiced - paid;
 

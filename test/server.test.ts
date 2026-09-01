@@ -32,6 +32,7 @@ test('customer statement combines invoices and account totals', async () => {
         id: 'INV-9002',
         issued: '2026-07-01',
         paid: false,
+        balance: 248400,
         net: 245000,
         vat: 3400,
         total: 248400,
@@ -86,4 +87,15 @@ test('customer statement rejects non-GET requests', async () => {
   assert.equal(response.status, 405);
   assert.equal(response.headers.get('allow'), 'GET');
   assert.deepEqual(await response.json(), { error: 'method not allowed' });
+});
+
+test('an invoice carries its payments and what is left on it', async () => {
+  const body = await (await fetch(`${baseUrl}/invoices/INV-9001`)).json();
+
+  assert.equal(body.paid, true);
+  assert.equal(body.settled, 11338);
+  assert.equal(body.balance, 0);
+  assert.deepEqual(body.payments, [
+    { id: 'PAY-3001', invoiceId: 'INV-9001', received: '2026-07-28', amountPence: 11338 },
+  ]);
 });
