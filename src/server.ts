@@ -1,12 +1,32 @@
 import { createServer } from 'node:http';
 import { customers, invoices, workOrders } from './db.ts';
 import { totalFor, outstandingFor, vatBandsFor } from './invoices/calc.ts';
-import { statementFor } from './invoices/statement.ts';
+import { statementFor, ALL_TIME, type StatementPeriod } from './invoices/statement.ts';
 import { dispatch } from './scheduling/dispatch.ts';
 import { slotsFor } from './scheduling/slots.ts';
 import { format } from './shared/money.ts';
 
 const PORT = Number(process.env.PORT ?? 4310);
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+// Statement periods are read straight off the query string as YYYY-MM-DD and
+// compared as strings. Neither end is required; both are inclusive.
+function readPeriod(url: URL): StatementPeriod | { error: string } {
+  const from = url.searchParams.get('from');
+  const to = url.searchParams.get('to');
+
+  for (const [name, value] of [['from', from], ['to', to]] as const) {
+    if (value !== null && !ISO_DATE.test(value)) {
+      return { error: `${name} must be a date in the form YYYY-MM-DD` };
+    }
+  }
+  if (from !== null && to !== null && from > to) {
+    return { error: 'from must not be after to' };
+  }
+
+  return from === null && to === null ? ALL_TIME : { from, to };
+}
 
 function json(res: import('node:http').ServerResponse, status: number, body: unknown) {
   const payload = JSON.stringify(body, null, 2);
@@ -65,7 +85,9 @@ export const server = createServer((req, res) => {
     }
     const customer = customers.find((candidate) => candidate.id === parts[1]);
     if (!customer) return json(res, 404, { error: 'no such customer' });
-    return json(res, 200, statementFor(customer, invoices));
+    const period = readPeriod(url);
+    if ('error' in period) return json(res, 400, period);
+    return json(res, 200, statementFor(customer, invoices, period));
   }
 
   if (parts[0] === 'invoices' && parts.length === 2) {

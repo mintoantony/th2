@@ -37,14 +37,38 @@ test('customer statement combines invoices and account totals', async () => {
         total: 248400,
       },
     ],
+    period: { from: null, to: null },
     totals: {
+      broughtForward: 0,
       net: 245000,
       vat: 3400,
       invoiced: 248400,
       paid: 0,
       outstanding: 248400,
     },
+    display: {
+      broughtForward: '£0.00',
+      invoiced: '£2,484.00',
+      paid: '£0.00',
+      outstanding: '£2,484.00',
+    },
   });
+});
+
+test('a statement can be asked for one quarter', async () => {
+  const response = await fetch(`${baseUrl}/customers/C-1004/statement?from=2026-01-01&to=2026-03-31`);
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(body.period, { from: '2026-01-01', to: '2026-03-31' });
+  assert.deepEqual(body.invoices, [], 'their only invoice was issued in April');
+});
+
+test('a statement rejects a period it cannot read', async () => {
+  const response = await fetch(`${baseUrl}/customers/C-1002/statement?from=last%20April`);
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), { error: 'from must be a date in the form YYYY-MM-DD' });
 });
 
 test('customer statement reports an unknown customer', async () => {
