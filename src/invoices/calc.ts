@@ -1,10 +1,13 @@
-import { sum, type Pence } from '../shared/money.ts';
+import { percentOf, sum, type Pence } from '../shared/money.ts';
 import type { Invoice, LineItem } from '../db.ts';
 
 export interface InvoiceTotal {
   net: Pence;
+  vat: Pence;
   total: Pence;
 }
+
+const STANDARD_VAT_PERCENT = 20;
 
 export function lineTotal(line: LineItem): Pence {
   return line.quantity * line.unitPence;
@@ -21,7 +24,11 @@ function legacySurcharge(invoice: Invoice): Pence {
 
 export function totalFor(invoice: Invoice): InvoiceTotal {
   const net = sum(invoice.lines.map(lineTotal)) + legacySurcharge(invoice);
-  return { net, total: net };
+  const vatable = sum(
+    invoice.lines.filter((line) => line.kind === 'SERVICE').map(lineTotal),
+  );
+  const vat = percentOf(vatable, STANDARD_VAT_PERCENT);
+  return { net, vat, total: net + vat };
 }
 
 export function outstandingFor(customerId: string, all: Invoice[]): Pence {
