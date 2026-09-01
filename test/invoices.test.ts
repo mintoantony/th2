@@ -20,8 +20,15 @@ test('outstanding balance ignores paid invoices', () => {
 
 test('commercial invoice totals', () => {
   const invoice = invoices.find((i) => i.id === 'INV-9002')!;
-  const result = totalFor(invoice);
-  assert.ok(result);
+  assert.deepEqual(totalFor(invoice), {
+    net: 245000,
+    vat: 3400,
+    total: 248400,
+  });
+});
+
+test('outstanding balance includes VAT', () => {
+  assert.equal(outstandingFor('C-1002', invoices), 248400);
 });
 
 test('legacy paper invoices carry the postage surcharge', () => {

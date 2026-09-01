@@ -12,11 +12,16 @@ function canDo(engineer: Engineer, order: WorkOrder): boolean {
   return engineer.skills.includes(order.requires);
 }
 
+function canonicalAddress(address: string): string {
+  return address.trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
 // One visit per address per day. Sending two vans to the same house on the same
 // morning is the single biggest source of complaints on the support queue.
 function alreadyVisiting(address: string, when: Date, planned: Assignment[]): boolean {
   return planned.some(
-    (a) => a.address === address && sameDay(new Date(a.startsAt), when),
+    (a) => canonicalAddress(a.address) === canonicalAddress(address)
+      && sameDay(new Date(a.startsAt), when),
   );
 }
 

@@ -1,0 +1,65 @@
+import { after, before, test } from 'node:test';
+import assert from 'node:assert/strict';
+import { server } from '../src/server.ts';
+
+let baseUrl: string;
+
+before(async () => {
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  assert.ok(address && typeof address !== 'string');
+  baseUrl = `http://127.0.0.1:${address.port}`;
+});
+
+after(async () => {
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => error ? reject(error) : resolve());
+  });
+});
+
+test('customer statement combines invoices and account totals', async () => {
+  const response = await fetch(`${baseUrl}/customers/C-1002/statement`);
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    customer: {
+      id: 'C-1002',
+      name: 'Trelawney Foods Ltd',
+      address: 'Unit 6, Severnside Park, Avonmouth',
+    },
+    invoices: [
+      {
+        id: 'INV-9002',
+        issued: '2026-07-01',
+        paid: false,
+        net: 245000,
+        vat: 3400,
+        total: 248400,
+      },
+    ],
+    totals: {
+      net: 245000,
+      vat: 3400,
+      invoiced: 248400,
+      paid: 0,
+      outstanding: 248400,
+    },
+  });
+});
+
+test('customer statement reports an unknown customer', async () => {
+  const response = await fetch(`${baseUrl}/customers/unknown/statement`);
+
+  assert.equal(response.status, 404);
+  assert.deepEqual(await response.json(), { error: 'no such customer' });
+});
+
+test('customer statement rejects non-GET requests', async () => {
+  const response = await fetch(`${baseUrl}/customers/C-1002/statement`, {
+    method: 'POST',
+  });
+
+  assert.equal(response.status, 405);
+  assert.equal(response.headers.get('allow'), 'GET');
+  assert.deepEqual(await response.json(), { error: 'method not allowed' });
+});

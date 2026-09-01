@@ -9,6 +9,20 @@ export const BANK_HOLIDAYS_2026 = [
   '2026-05-25', '2026-08-31', '2026-12-25', '2026-12-28',
 ];
 
+const UK_TIME_ZONE = 'Europe/London';
+const UK_TIME_FORMAT = new Intl.DateTimeFormat('en-GB', {
+  timeZone: UK_TIME_ZONE,
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+});
+const UK_DATE_FORMAT = new Intl.DateTimeFormat('en-GB', {
+  timeZone: UK_TIME_ZONE,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
 export function toDateKey(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
@@ -31,9 +45,15 @@ export function addWorkingDays(from: Date, n: number): Date {
 
 // What the customer is told their appointment time is.
 export function formatSlotTime(d: Date): string {
-  const hh = String(d.getHours()).padStart(2, '0');
-  const mm = String(d.getMinutes()).padStart(2, '0');
-  return `${hh}:${mm}`;
+  return UK_TIME_FORMAT.format(d);
+}
+
+export function formatSlotDate(d: Date): string {
+  const parts = UK_DATE_FORMAT.formatToParts(d);
+  const year = parts.find((part) => part.type === 'year')!.value;
+  const month = parts.find((part) => part.type === 'month')!.value;
+  const day = parts.find((part) => part.type === 'day')!.value;
+  return `${year}-${month}-${day}`;
 }
 
 export function sameDay(a: Date, b: Date): boolean {
