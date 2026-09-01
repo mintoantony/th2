@@ -46,3 +46,22 @@ carrying dates and amounts. That also unlocks partial payments and 30/60/90
 ageing, which is the next thing a finance team normally asks for. Not done here
 because it changes the data model, `outstandingFor()` and the seed data, and
 nobody has asked for it yet.
+
+### Limitation resolved, 1 Sep
+
+The `paid` boolean is gone. Payments are their own records with a date and an
+amount, and whether an invoice is settled is derived from them as at whatever
+date you ask about.
+
+So a historic statement now comes out the same today as it did at the time. An
+invoice raised in Q2 and settled in Q3 shows as unpaid on the Q2 statement and as
+money received on the Q3 one, instead of quietly being paid on both. Part
+payments work: the balance is what is left, not all or nothing.
+
+Balances are unchanged. All four customers report exactly what they reported
+before, because the two invoices that carried `paid: true` became two payments
+for the full amount.
+
+Still not done, and still nobody has asked: due dates and 30/60/90 ageing. Those
+need payment terms, which are not recorded anywhere and which nobody has
+specified. Not inventing them.

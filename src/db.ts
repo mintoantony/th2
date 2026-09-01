@@ -27,7 +27,21 @@ export interface Invoice {
   // 'LEGACY_PAPER' came from the pre-2019 desktop product. The importer that
   // created them was switched off when the last paper run went out.
   source: 'WEB' | 'BATCH' | 'LEGACY_PAPER';
-  paid: boolean;
+}
+
+// There used to be a `paid` boolean on the invoice. It could not say when
+// something was settled or record a part payment, so a statement for a past
+// quarter was never reproducible: it was worked out from what was unpaid now.
+// Whether an invoice is paid is derived from these, as at whatever date you ask
+// about. Anything that wants that should call the helpers in invoices/calc.ts
+// rather than counting payments itself.
+export interface Payment {
+  id: string;
+  invoiceId: string;
+  // The day the money landed. A UK date, no time of day: see shared/dates.ts
+  // for why nothing here is a Date.
+  received: string;
+  amountPence: number;
 }
 
 export interface Engineer {
@@ -57,14 +71,14 @@ export const customers: Customer[] = [
 
 export const invoices: Invoice[] = [
   {
-    id: 'INV-9001', customerId: 'C-1001', issued: '2026-07-01', source: 'WEB', paid: true,
+    id: 'INV-9001', customerId: 'C-1001', issued: '2026-07-01', source: 'WEB',
     lines: [
       { description: 'Metered supply, Q2', quantity: 41, unitPence: 218, kind: 'SUPPLY' },
       { description: 'Standing charge', quantity: 1, unitPence: 2400, kind: 'SUPPLY' },
     ],
   },
   {
-    id: 'INV-9002', customerId: 'C-1002', issued: '2026-07-01', source: 'BATCH', paid: false,
+    id: 'INV-9002', customerId: 'C-1002', issued: '2026-07-01', source: 'BATCH',
     lines: [
       { description: 'Metered supply, Q2', quantity: 1120, unitPence: 195, kind: 'SUPPLY' },
       { description: 'Standing charge', quantity: 1, unitPence: 9600, kind: 'SUPPLY' },
@@ -72,7 +86,7 @@ export const invoices: Invoice[] = [
     ],
   },
   {
-    id: 'INV-9003', customerId: 'C-1003', issued: '2026-07-01', source: 'WEB', paid: false,
+    id: 'INV-9003', customerId: 'C-1003', issued: '2026-07-01', source: 'WEB',
     lines: [
       { description: 'Metered supply, Q2', quantity: 33, unitPence: 218, kind: 'SUPPLY' },
       { description: 'Standing charge', quantity: 1, unitPence: 2400, kind: 'SUPPLY' },
@@ -80,12 +94,21 @@ export const invoices: Invoice[] = [
     ],
   },
   {
-    id: 'INV-9004', customerId: 'C-1004', issued: '2026-04-01', source: 'BATCH', paid: true,
+    id: 'INV-9004', customerId: 'C-1004', issued: '2026-04-01', source: 'BATCH',
     lines: [
       { description: 'Metered supply, Q1', quantity: 2840, unitPence: 195, kind: 'SUPPLY' },
       { description: 'Standing charge', quantity: 1, unitPence: 9600, kind: 'SUPPLY' },
     ],
   },
+];
+
+// The two invoices that used to carry `paid: true`, now with the dates the money
+// actually arrived. Balances are unchanged: INV-9002 and INV-9003 are still owed
+// in full. Part payments are supported and covered by tests; there is not one in
+// here because inventing one would move a customer balance nobody asked to move.
+export const payments: Payment[] = [
+  { id: 'PAY-3001', invoiceId: 'INV-9001', received: '2026-07-28', amountPence: 11338 },
+  { id: 'PAY-3002', invoiceId: 'INV-9004', received: '2026-05-06', amountPence: 563400 },
 ];
 
 export const engineers: Engineer[] = [
