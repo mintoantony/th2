@@ -63,3 +63,21 @@ test('customer statement rejects non-GET requests', async () => {
   assert.equal(response.headers.get('allow'), 'GET');
   assert.deepEqual(await response.json(), { error: 'method not allowed' });
 });
+test('the invoice list carries totals so VAT is visible without opening each one', async () => {
+  const body = await (await fetch(`${baseUrl}/customers/C-1002/invoices`)).json();
+  assert.deepEqual(
+    { net: body[0].net, vat: body[0].vat, total: body[0].total },
+    { net: 245000, vat: 3400, total: 248400 },
+  );
+  assert.equal(body[0].lines.length, 3, 'line items must survive');
+});
+
+test('an invoice shows the VAT breakdown Accounts need', async () => {
+  const body = await (await fetch(`${baseUrl}/invoices/INV-9003`)).json();
+  assert.deepEqual(body.vatBands, [
+    { rate: 0, net: 9594, vat: 0 },
+    { rate: 20, net: 14000, vat: 2800 },
+  ]);
+  assert.deepEqual(body.displayTotals, { net: '£235.94', vat: '£28.00', total: '£263.94' });
+  assert.equal(body.display, '£263.94', 'existing consumers read display');
+});

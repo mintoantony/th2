@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { totalFor, lineTotal, outstandingFor } from '../src/invoices/calc.ts';
+import { totalFor, lineTotal, outstandingFor, vatRateFor, vatBandsFor } from '../src/invoices/calc.ts';
 import { invoices, type Invoice } from '../src/db.ts';
+import { sum } from '../src/shared/money.ts';
 
 test('line totals multiply quantity by unit price', () => {
   assert.equal(lineTotal({ description: 'x', quantity: 41, unitPence: 218, kind: 'SUPPLY' }), 8938);
@@ -41,4 +42,24 @@ test('legacy paper invoices carry the postage surcharge', () => {
     lines: [{ description: 'Metered supply', quantity: 10, unitPence: 100, kind: 'SUPPLY' }],
   };
   assert.equal(totalFor(paper).total, 1150);
+});
+
+// JOB A: the vatable base is still a guess. This pins what the code does today
+// so the diff is visible when Sandra's rule arrives. Not an endorsement of it.
+test('PROVISIONAL: engineer work is standard rated, water supply is not', () => {
+  assert.equal(vatRateFor({ description: 'Call out', quantity: 1, unitPence: 100, kind: 'SERVICE' }), 20);
+  assert.equal(vatRateFor({ description: 'Supply', quantity: 1, unitPence: 100, kind: 'SUPPLY' }), 0);
+});
+
+test('vat bands split an invoice by rate and reconcile with its totals', () => {
+  const invoice = invoices.find((i) => i.id === 'INV-9003')!;
+  assert.deepEqual(vatBandsFor(invoice), [
+    { rate: 0, net: 9594, vat: 0 },
+    { rate: 20, net: 14000, vat: 2800 },
+  ]);
+  for (const each of invoices) {
+    const bands = vatBandsFor(each);
+    assert.equal(sum(bands.map((b) => b.net)), totalFor(each).net, `${each.id} net`);
+    assert.equal(sum(bands.map((b) => b.vat)), totalFor(each).vat, `${each.id} vat`);
+  }
 });

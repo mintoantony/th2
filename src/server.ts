@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { customers, invoices, workOrders } from './db.ts';
-import { totalFor, outstandingFor } from './invoices/calc.ts';
+import { totalFor, outstandingFor, vatBandsFor } from './invoices/calc.ts';
 import { statementFor } from './invoices/statement.ts';
 import { dispatch } from './scheduling/dispatch.ts';
 import { slotsFor } from './scheduling/slots.ts';
@@ -49,7 +49,13 @@ export const server = createServer((req, res) => {
   }
 
   if (parts[0] === 'customers' && parts.length === 3 && parts[2] === 'invoices') {
-    return json(res, 200, invoices.filter((i) => i.customerId === parts[1]));
+    return json(
+      res,
+      200,
+      invoices
+        .filter((i) => i.customerId === parts[1])
+        .map((invoice) => ({ ...invoice, ...totalFor(invoice) })),
+    );
   }
 
   if (parts[0] === 'customers' && parts.length === 3 && parts[2] === 'statement') {
@@ -66,7 +72,18 @@ export const server = createServer((req, res) => {
     const invoice = invoices.find((i) => i.id === parts[1]);
     if (!invoice) return json(res, 404, { error: 'no such invoice' });
     const totals = totalFor(invoice);
-    return json(res, 200, { ...invoice, ...totals, display: format(totals.total) });
+    return json(res, 200, {
+      ...invoice,
+      ...totals,
+      vatBands: vatBandsFor(invoice),
+      // `display` is what the front end already reads. Left alone.
+      display: format(totals.total),
+      displayTotals: {
+        net: format(totals.net),
+        vat: format(totals.vat),
+        total: format(totals.total),
+      },
+    });
   }
 
   if (parts[0] === 'work-orders') {
