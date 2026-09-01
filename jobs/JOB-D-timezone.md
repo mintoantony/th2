@@ -37,3 +37,22 @@ The existing test asserted the wrong date. It was written from the output rather
 than from the confirmation the customer receives, which is how this stayed green
 through two closures. Corrected, and the suite now passes under UTC,
 Europe/London, America/New_York and Australia/Sydney.
+
+### One more of the same, found while fixing this
+
+`isWorkingDay()` had the identical fault and nobody had reported it, because
+nothing in `src/` calls it yet. It read the weekend off the server clock with
+`getDay()` and then looked the bank holiday up under a UTC key, so the two halves
+were asking about different days:
+
+- 2026-08-30T23:30Z is 31 August in London, the August bank holiday. It answered
+  "working day" on a UK box.
+- 2026-08-31T23:30Z is an ordinary Tuesday. It answered "bank holiday" everywhere.
+- And it gave different answers on a UTC build box than on a UK one.
+
+`addWorkingDays()` sat on top of that and stepped with `setDate()`, which is
+server local time and so can lose or repeat a day across a clock change.
+
+Both now work in UK calendar days. Fixed here rather than left for later because
+it is the same mistake as this ticket, in the file the header comment already
+warns about, and the next thing anyone builds on it will be payment due dates.
